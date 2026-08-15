@@ -1,0 +1,16 @@
+# secrets & local data — never commit
+.env
+*.db
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# runtime uploads (keep the folder, ignore its contents)
+uploads/*
+!uploads/.gitkeep
+
+# macOS
+.DS_Store

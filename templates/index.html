@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal Scout</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">DS</span>
+    <h1>Deal Scout</h1>
+  </div>
+  <nav>
+    <a href="/" class="active">Analyze</a>
+    <a href="/history">History</a>
+  </nav>
+  {% if demo_mode %}<span class="demo-pill">DEMO MODE — data is fake</span>{% endif %}
+</header>
+
+<main>
+
+{% if error %}
+<div class="banner banner-error">{{ error }}</div>
+{% endif %}
+
+{% for w in warnings or [] %}
+<div class="banner banner-warn">{{ w }}</div>
+{% endfor %}
+
+{% if result %}
+<section class="results">
+  <div class="verdict-row">
+    <span class="stamp stamp-{{ result.verdict|lower }}">{{ result.verdict }}</span>
+    <div class="verdict-item">
+      <h2>{{ result.title }}</h2>
+      <p class="asking">Asking <strong>${{ '%.2f'|format(result.asking_price) }}</strong></p>
+    </div>
+  </div>
+
+  <p class="reason">{{ result.reason }}</p>
+
+  {% if result.comps.count %}
+  <div class="numbers">
+    <div class="num">
+      <span class="num-label">Est. resale range</span>
+      <span class="num-value">${{ '%.0f'|format(result.comps.low) }}–${{ '%.0f'|format(result.comps.high) }}</span>
+      <span class="num-note">based on active listings, not confirmed sales</span>
+    </div>
+    <div class="num">
+      <span class="num-label">Est. profit at asking</span>
+      <span class="num-value">${{ '%.0f'|format(result.est_profit_low) }}–${{ '%.0f'|format(result.est_profit_high) }}</span>
+      <span class="num-note">based on active listings, not confirmed sales</span>
+    </div>
+    <div class="num">
+      <span class="num-label">Costs assumed</span>
+      <span class="num-value">{{ result.fee_percent }}% fee + ${{ '%.0f'|format(result.shipping_est) }} ship</span>
+      <span class="num-note">{{ result.comps.count }} comps found</span>
+    </div>
+    {% if result.suggested_offer %}
+    <div class="num num-offer">
+      <span class="num-label">Suggested offer</span>
+      <span class="num-value">${{ '%.0f'|format(result.suggested_offer) }}</span>
+      <span class="num-note">opening number, expect to land higher</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if result.vision.condition or result.vision.red_flags or result.vision.missing_info %}
+  <div class="panel">
+    <h3>Photo &amp; description check</h3>
+    {% if result.vision.condition %}
+      <p><strong>Condition ({{ result.vision.condition_grade }}):</strong> {{ result.vision.condition }}</p>
+    {% endif %}
+    {% if result.vision.red_flags %}
+      <p class="flag-title">Red flags</p>
+      <ul>{% for f in result.vision.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if result.vision.missing_info %}
+      <p class="flag-title">Ask the seller</p>
+      <ul>{% for q in result.vision.missing_info %}<li>{{ q }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if result.negotiation_draft %}
+  <div class="panel panel-draft">
+    <h3>Draft message — review before sending. This tool never sends anything.</h3>
+    <textarea id="draft" rows="4" readonly>{{ result.negotiation_draft }}</textarea>
+    <button type="button" class="btn-secondary" onclick="copyDraft()">Copy message</button>
+  </div>
+  {% endif %}
+
+  {% if result.sample_comps %}
+  <details class="panel">
+    <summary>Comparable listings used ({{ result.sample_comps|length }} shown)</summary>
+    <ul class="comps">
+      {% for c in result.sample_comps %}
+      <li><span class="comp-price">${{ '%.2f'|format(c.price) }}</span> {{ c.title }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  <a class="btn-secondary" href="/">Analyze another item</a>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Check a listing</h2>
+
+  <form action="/analyze" method="post" enctype="multipart/form-data">
+
+    <label for="ebay_url">eBay listing URL <span class="hint">(eBay only — details pull automatically)</span></label>
+    <input type="text" id="ebay_url" name="ebay_url" placeholder="https://www.ebay.com/itm/...">
+
+    <div class="divider"><span>or enter details yourself (Facebook Marketplace, Craigslist, OfferUp…)</span></div>
+
+    <label for="title">Item title</label>
+    <input type="text" id="title" name="title" placeholder="DeWalt 20V Max cordless drill kit">
+
+    <label for="asking_price">Asking price ($)</label>
+    <input type="number" id="asking_price" name="asking_price" min="0" step="0.01" placeholder="45">
+
+    <label for="description">Listing description <span class="hint">(paste it in)</span></label>
+    <textarea id="description" name="description" rows="4" placeholder="Copy the seller's description here…"></textarea>
+
+    <label for="photos">Photos <span class="hint">(save them from the listing, then drop them here — up to 6)</span></label>
+    <input type="file" id="photos" name="photos" multiple accept=".jpg,.jpeg,.png,.webp,.gif">
+
+    <label for="size_class">Size / shipping class</label>
+    <select id="size_class" name="size_class">
+      <option value="small">Small — padded envelope or small box (phone, video game)</option>
+      <option value="medium" selected>Medium — shoebox to microwave size</option>
+      <option value="large">Large — big box (monitor, power tool set)</option>
+      <option value="freight">Freight — furniture, exercise equipment</option>
+    </select>
+
+    <button type="submit" class="btn-primary" id="analyze-btn">Analyze this deal</button>
+    <p class="fine-print">Estimates use active eBay listings, not confirmed sales — treat profit numbers as optimistic.</p>
+  </form>
+</section>
+
+</main>
+
+<script>
+function copyDraft() {
+  const t = document.getElementById('draft');
+  t.select();
+  navigator.clipboard.writeText(t.value);
+}
+document.querySelector('form').addEventListener('submit', function () {
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing… (can take ~30 seconds)';
+});
+</script>
+
+</body>
+</html>

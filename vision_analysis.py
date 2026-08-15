@@ -1,0 +1,136 @@
+"""
+Deal Scout photo & description analysis — powered by Google Gemini (free).
+
+Sends the listing photos and text to Gemini and gets back:
+  - a condition assessment
+  - authenticity / scam red flags
+  - what's missing that you should ask the seller
+  - a category guess (used to pick the right eBay fee)
+
+Uses the free Gemini API — no credit card, no expiration (Google's free
+tier as of 2026: ~1,500 requests/day on the Flash model, which is far
+more than a reseller doing manual analyses would ever hit). The only
+tradeoff vs. a paid model: occasionally slightly less sharp on subtle
+condition judgment calls, but plenty good for this.
+
+If DEMO_MODE is on, returns a realistic fake report instead.
+"""
+
+import base64
+import json
+import os
+from pathlib import Path
+
+import requests
+
+import settings
+
+API_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
+          "{model}:generateContent")
+
+_MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".png": "image/png", ".webp": "image/webp",
+                ".gif": "image/gif"}
+
+PROMPT = """You are helping a reseller evaluate a marketplace listing they might buy to flip.
+
+Listing title: {title}
+Asking price: ${price}
+Description: {description}
+
+Look at the photos (if any) and the text. Respond ONLY with JSON, no other text, no markdown code fences, in exactly this shape:
+{{
+  "condition": "one short sentence on apparent condition",
+  "condition_grade": "one of: Like New / Good / Fair / Poor / Unknown",
+  "red_flags": ["short bullet", "..."],
+  "missing_info": ["what to ask the seller before buying", "..."],
+  "category_guess": "short category like: tools, electronics, sneakers, video games, collectibles, clothing, etc.",
+  "resale_title_suggestion": "a strong eBay search/listing title for this exact item, including brand and model if visible"
+}}
+Keep red_flags and missing_info honest and specific. Empty lists are fine if there's nothing to flag."""
+
+
+def _encode_photo(path: Path) -> dict | None:
+    """Gemini wants images as inlineData, not a URL or file upload."""
+    media = _MEDIA_TYPES.get(path.suffix.lower())
+    if not media:
+        return None
+    try:
+        data = base64.b64encode(path.read_bytes()).decode()
+    except OSError:
+        return None
+    return {"inlineData": {"mimeType": media, "data": data}}
+
+
+def analyze(title: str, price: float, description: str,
+            photo_paths: list[Path]) -> dict:
+    """Returns the vision report dict. Never crashes the app — on any
+    failure it returns a report explaining what went wrong."""
+    if settings.DEMO_MODE:
+        return {
+            "condition": "DEMO: Light cosmetic wear on the casing; appears "
+                         "fully functional in photos.",
+            "condition_grade": "Good",
+            "red_flags": ["DEMO: Serial number sticker partially removed",
+                          "DEMO: Stock photo used for one of the images"],
+            "missing_info": ["DEMO: Ask whether the battery holds a charge",
+                             "DEMO: Ask for a photo of it powered on"],
+            "category_guess": "tools",
+            "resale_title_suggestion": f"DEMO resale title for: {title[:50]}",
+        }
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return _error_report("Gemini API key missing — add GEMINI_API_KEY "
+                             "to your .env file (free at "
+                             "aistudio.google.com), or turn on DEMO_MODE "
+                             "in settings.py.")
+
+    parts = []
+    for p in photo_paths[:settings.MAX_PHOTOS]:
+        block = _encode_photo(Path(p))
+        if block:
+            parts.append(block)
+    parts.append({"text": PROMPT.format(
+        title=title, price=price, description=(description or "(none)")[:3000])})
+
+    try:
+        r = requests.post(
+            API_URL.format(model=settings.GEMINI_MODEL),
+            params={"key": api_key},
+            headers={"content-type": "application/json"},
+            json={"contents": [{"parts": parts}],
+                  "generationConfig": {"maxOutputTokens": 1000}},
+            timeout=90)
+        r.raise_for_status()
+        data = r.json()
+        candidates = data.get("candidates", [])
+        if not candidates:
+            reason = data.get("promptFeedback", {}).get(
+                "blockReason", "no response returned")
+            return _error_report(f"Photo analysis didn't return a result "
+                                 f"({reason}). Try again, or check the "
+                                 f"photos aren't unusually large.")
+        response_parts = candidates[0].get("content", {}).get("parts", [])
+        text = "".join(p.get("text", "") for p in response_parts)
+        text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        report = json.loads(text)
+        # Make sure every field the results page expects is present:
+        report.setdefault("condition", "Unknown")
+        report.setdefault("condition_grade", "Unknown")
+        report.setdefault("red_flags", [])
+        report.setdefault("missing_info", [])
+        report.setdefault("category_guess", None)
+        report.setdefault("resale_title_suggestion", title)
+        return report
+    except requests.RequestException as e:
+        return _error_report(f"Photo analysis failed (network/API): {e}")
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        return _error_report(f"Photo analysis returned an unexpected format: {e}")
+
+
+def _error_report(msg: str) -> dict:
+    return {"condition": None, "condition_grade": "Unknown",
+            "red_flags": [], "missing_info": [],
+            "category_guess": None, "resale_title_suggestion": None,
+            "error": msg}

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal Scout — History</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">DS</span>
+    <h1>Deal Scout</h1>
+  </div>
+  <nav>
+    <a href="/">Analyze</a>
+    <a href="/history" class="active">History</a>
+  </nav>
+  {% if demo_mode %}<span class="demo-pill">DEMO MODE — data is fake</span>{% endif %}
+</header>
+
+<main>
+<section class="card">
+  <h2>Everything you've analyzed</h2>
+
+  <div class="filters">
+    <a href="/history" class="{{ 'on' if active_filter == 'ALL' }}">All</a>
+    <a href="/history?verdict=BUY" class="{{ 'on' if active_filter == 'BUY' }}">BUY</a>
+    <a href="/history?verdict=NEGOTIATE" class="{{ 'on' if active_filter == 'NEGOTIATE' }}">NEGOTIATE</a>
+    <a href="/history?verdict=PASS" class="{{ 'on' if active_filter == 'PASS' }}">PASS</a>
+  </div>
+
+  {% if not rows %}
+  <p class="empty">Nothing here yet. Analyze your first listing and it'll show up in this list.</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr><th></th><th>Date</th><th>Item</th><th>Asking</th><th>Verdict</th><th>Est. profit*</th><th>Offer</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="row-main" onclick="toggleDetail({{ r.id }})">
+        <td class="expand-arrow" id="arrow-{{ r.id }}">›</td>
+        <td class="mono">{{ r.analyzed_at[:10] }}</td>
+        <td>{{ r.title }}</td>
+        <td class="mono">${{ '%.0f'|format(r.asking_price) }}</td>
+        <td><span class="stamp stamp-sm stamp-{{ r.verdict|lower }}">{{ r.verdict }}</span></td>
+        <td class="mono">
+          {% if r.est_profit_low is not none %}${{ '%.0f'|format(r.est_profit_low) }}–${{ '%.0f'|format(r.est_profit_high) }}{% else %}—{% endif %}
+        </td>
+        <td class="mono">{% if r.suggested_offer %}${{ '%.0f'|format(r.suggested_offer) }}{% else %}—{% endif %}</td>
+      </tr>
+      <tr class="row-detail" id="detail-{{ r.id }}" hidden>
+        <td colspan="7">
+          <div class="detail-box">
+
+            {% if r.url %}
+            <p><strong>Source:</strong> <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.url }}</a></p>
+            {% endif %}
+
+            {% if r.description %}
+            <p><strong>Description:</strong> {{ r.description }}</p>
+            {% endif %}
+
+            <p class="detail-grid">
+              <span><strong>Category guess:</strong> {{ r.category_guess or '—' }}</span>
+              <span><strong>Size class:</strong> {{ r.size_class or '—' }}</span>
+              <span><strong>Fee assumed:</strong> {% if r.fee_percent %}{{ r.fee_percent }}%{% else %}—{% endif %}</span>
+              <span><strong>Shipping assumed:</strong> {% if r.shipping_est %}${{ '%.0f'|format(r.shipping_est) }}{% else %}—{% endif %}</span>
+              <span><strong>Comps found:</strong> {{ r.comps_count or 0 }}</span>
+              <span><strong>Resale range:</strong>
+                {% if r.est_resale_low is not none %}${{ '%.0f'|format(r.est_resale_low) }}–${{ '%.0f'|format(r.est_resale_high) }}{% else %}—{% endif %}
+              </span>
+            </p>
+
+            {% if r.vision_report and r.vision_report.condition %}
+            <p><strong>Condition ({{ r.vision_report.condition_grade }}):</strong> {{ r.vision_report.condition }}</p>
+            {% endif %}
+
+            {% if r.vision_report and r.vision_report.red_flags %}
+            <p class="flag-title">Red flags</p>
+            <ul>{% for f in r.vision_report.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            {% if r.vision_report and r.vision_report.missing_info %}
+            <p class="flag-title">Was worth asking the seller</p>
+            <ul>{% for q in r.vision_report.missing_info %}<li>{{ q }}</li>{% endfor %}</ul>
+            {% endif %}
+
+            {% if r.negotiation_draft %}
+            <p class="flag-title">Negotiation draft that was generated</p>
+            <textarea rows="3" readonly>{{ r.negotiation_draft }}</textarea>
+            {% endif %}
+
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="fine-print">* Based on active eBay listings at time of analysis, not confirmed sales.</p>
+  {% endif %}
+</section>
+</main>
+
+<script>
+function toggleDetail(id) {
+  const row = document.getElementById('detail-' + id);
+  const arrow = document.getElementById('arrow-' + id);
+  const isOpen = !row.hidden;
+  row.hidden = isOpen;
+  arrow.classList.toggle('open', !isOpen);
+}
+</script>
+
+</body>
+</html>
