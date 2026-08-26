@@ -5,7 +5,8 @@ profit range, plus a photo analysis and a ready-to-send negotiation message.
 
 *I built it because I kept eyeballing resale deals and doing the same math by
 hand: what it's worth, what eBay takes, whether there's room to haggle. This
-does the math and adds a second read on the listing photos before I commit.*
+does the math and adds a second read on the listing photos before I commit. It
+does what I needed, so I stopped there.*
 
 ## Demo mode (no keys needed)
 It runs on fake data out of the box:
@@ -35,6 +36,6 @@ they appear. It's a decision aid, not a guarantee.
 2. Set `DEMO_MODE = False` in `settings.py`
 3. `python dealscout.py`
 
-## What I'd do next
+## If I came back to it
 - Use sold-price data (eBay Marketplace Insights) for realistic estimates
 - Support marketplaces beyond eBay
