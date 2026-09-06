@@ -39,3 +39,7 @@ they appear. It's a decision aid, not a guarantee.
 ## If I came back to it
 - Use sold-price data (eBay Marketplace Insights) for realistic estimates
 - Support marketplaces beyond eBay
+
+## License
+
+MIT — see [LICENSE](LICENSE).
