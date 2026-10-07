@@ -10,6 +10,7 @@ calls, so it works without keys.
 
 import base64
 import logging
+import math
 import os
 import random
 import re
@@ -83,10 +84,18 @@ def _get_token() -> str:
             raise EbayError(SIGNIN_REFUSED)
         raise EbayError(SIGNIN_BAD_ANSWER)
 
-    data = r.json()
-    _token_cache["token"] = data["access_token"]
-    _token_cache["expires"] = time.time() + int(data.get("expires_in", 7200))
-    return _token_cache["token"]
+    data = _json(r)
+    token = data.get("access_token") if isinstance(data, dict) else None
+    if not isinstance(token, str) or not token:
+        log.warning("eBay sign-in failed: unreadable answer")
+        raise EbayError(SIGNIN_BAD_ANSWER)
+    try:
+        lifetime = int(data.get("expires_in", 7200))
+    except (TypeError, ValueError):
+        lifetime = 7200
+    _token_cache["token"] = token
+    _token_cache["expires"] = time.time() + lifetime
+    return token
 
 
 def search_comps(query: str, asking_price: float) -> list[dict]:
@@ -114,16 +123,46 @@ def search_comps(query: str, asking_price: float) -> list[dict]:
             _token_cache.update(token=None, expires=0)
         raise EbayError(SEARCH_FAILED)
 
+    data = _json(r)
+    if not isinstance(data, dict):
+        log.warning("eBay comp search failed: unreadable answer")
+        raise EbayError(SEARCH_FAILED)
+    items = data.get("itemSummaries")
     comps = []
-    for item in r.json().get("itemSummaries", []):
-        price = item.get("price", {}).get("value")
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        price = _price(item.get("price"))
         if price:
             comps.append({
-                "title": item.get("title", ""),
-                "price": float(price),
-                "url": item.get("itemWebUrl", ""),
+                "title": _str(item.get("title")),
+                "price": price,
+                "url": _str(item.get("itemWebUrl")),
             })
     return comps
+
+
+def _json(r: requests.Response):
+    """The answer's JSON, or None if it isn't JSON."""
+    try:
+        return r.json()
+    except ValueError:
+        return None
+
+
+def _str(value) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _price(value) -> float | None:
+    """eBay's {"value": "12.34"} as a positive number, or None."""
+    if not isinstance(value, dict):
+        return None
+    try:
+        price = float(value.get("value"))
+    except (TypeError, ValueError):
+        return None
+    return price if math.isfinite(price) and price > 0 else None
 
 
 def extract_item_id(url: str) -> str | None:
@@ -164,21 +203,25 @@ def fetch_listing_from_url(url: str) -> dict:
             _token_cache.update(token=None, expires=0)
         raise EbayError(LISTING_FAILED)
 
-    data = r.json()
+    data = _json(r)
+    if not isinstance(data, dict):
+        log.warning("eBay listing lookup failed: unreadable answer")
+        raise EbayError(LISTING_FAILED)
     images = []
-    if data.get("image", {}).get("imageUrl"):
-        images.append(data["image"]["imageUrl"])
-    for extra in data.get("additionalImages", [])[:settings.MAX_PHOTOS - 1]:
-        if extra.get("imageUrl"):
-            images.append(extra["imageUrl"])
+    main_image = data.get("image")
+    extras = data.get("additionalImages")
+    for image in ([main_image] + (extras if isinstance(extras, list) else [])):
+        if isinstance(image, dict) and _str(image.get("imageUrl")):
+            images.append(image["imageUrl"])
 
     return {
-        "title": data.get("title", "(untitled eBay listing)"),
-        "asking_price": float(data.get("price", {}).get("value", 0)),
-        "description": (data.get("shortDescription")
+        "title": _str(data.get("title")) or "(untitled eBay listing)",
+        # No usable price gives 0, which the app turns into a message.
+        "asking_price": _price(data.get("price")) or 0.0,
+        "description": (_str(data.get("shortDescription"))
                         or re.sub(r"<[^>]+>", " ",
-                                  data.get("description", ""))[:2000]),
-        "image_urls": images,
+                                  _str(data.get("description")))[:2000]),
+        "image_urls": images[:settings.MAX_PHOTOS],
     }
 
 

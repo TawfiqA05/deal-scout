@@ -133,14 +133,41 @@ def analyze(title: str, price: float, description: str,
     except ValueError:
         log.warning("Photo check failed: unreadable answer")
         return _error_report(MESSAGES["shape"])
-    # Make sure every field the results page expects is present:
-    report.setdefault("condition", "Unknown")
-    report.setdefault("condition_grade", "Unknown")
-    report.setdefault("red_flags", [])
-    report.setdefault("missing_info", [])
-    report.setdefault("category_guess", None)
-    report.setdefault("resale_title_suggestion", title)
-    return report
+    if not isinstance(report, dict):
+        log.warning("Photo check failed: answer is not an object")
+        return _error_report(MESSAGES["shape"])
+    return clean_report(report, title)
+
+
+def clean_report(report: dict, title: str) -> dict:
+    """Every field the results page expects, in the type it expects. A
+    list where text belongs gives its first item, and text where a list
+    belongs becomes a one-item list, so it can't print letter by letter."""
+    return {
+        "condition": _text(report.get("condition")) or "Unknown",
+        "condition_grade": _text(report.get("condition_grade")) or "Unknown",
+        "red_flags": text_list(report.get("red_flags")),
+        "missing_info": text_list(report.get("missing_info")),
+        "category_guess": _text(report.get("category_guess")),
+        "resale_title_suggestion":
+            _text(report.get("resale_title_suggestion")) or title,
+    }
+
+
+def _text(value) -> str | None:
+    if isinstance(value, list):
+        value = next((v for v in value if isinstance(v, str) and v.strip()), None)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def text_list(value) -> list[str]:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [v.strip() for v in value if isinstance(v, str) and v.strip()]
 
 
 def _error_report(msg: str) -> dict:

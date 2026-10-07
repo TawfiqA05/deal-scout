@@ -119,8 +119,16 @@ def get_history(verdict_filter: str | None = None, limit: int = 200):
         for r in rows:
             d = dict(r)
             try:
-                d["vision_report"] = json.loads(d.get("vision_report") or "{}")
+                report = json.loads(d.get("vision_report") or "{}")
             except json.JSONDecodeError:
-                d["vision_report"] = {}
+                report = {}
+            if not isinstance(report, dict):
+                report = {}
+            # Older rows may hold a string where a list belongs, which
+            # would print one letter per line.
+            for field in ("red_flags", "missing_info"):
+                if isinstance(report.get(field), str):
+                    report[field] = [report[field]]
+            d["vision_report"] = report
             result.append(d)
         return result
