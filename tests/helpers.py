@@ -57,11 +57,16 @@ def fresh_db():
 
 def run_fresh_python(code, env_updates=None, cwd=None):
     """Run code in a new interpreter with the repo importable, the network
-    blocked and only the given DEALSCOUT_ settings. Returns stdout."""
+    blocked and only the given DEALSCOUT_ settings (temp paths for any left
+    out). Returns stdout."""
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("DEALSCOUT_", "EBAY_", "GEMINI_"))}
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     env.update(env_updates or {})
+    # A path left out would fall back to the real history, photos or .env.
+    env.setdefault("DEALSCOUT_ENV_FILE", str(TMP_DIR / "empty.env"))
+    env.setdefault("DEALSCOUT_DB_PATH", str(TMP_DIR / "fresh-python.db"))
+    env.setdefault("DEALSCOUT_UPLOADS_DIR", str(TMP_DIR / "uploads"))
     result = subprocess.run(
         [sys.executable, "-c", BLOCK_NETWORK_CODE
          + f"import sys; sys.path.insert(0, {str(REPO_DIR)!r})\n" + code],

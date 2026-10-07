@@ -9,6 +9,7 @@ import unittest
 import requests
 from werkzeug.serving import make_server
 
+from tests import EMPTY_ENV_FILE, TMP_DIR
 from tests.helpers import BASE_URL, fresh_db, local_client, run_fresh_python
 
 import database
@@ -154,7 +155,11 @@ class FormToken(GuardTestCase):
 
     def test_token_changes_on_each_start(self):
         code = "import dealscout; print(dealscout.FORM_TOKEN)"
-        first, second = run_fresh_python(code), run_fresh_python(code)
+        temp_paths = {"DEALSCOUT_ENV_FILE": str(EMPTY_ENV_FILE),
+                      "DEALSCOUT_DB_PATH": str(TMP_DIR / "token-start.db"),
+                      "DEALSCOUT_UPLOADS_DIR": str(TMP_DIR / "uploads")}
+        first = run_fresh_python(code, temp_paths)
+        second = run_fresh_python(code, temp_paths)
         self.assertNotEqual(first.strip(), second.strip())
 
 
