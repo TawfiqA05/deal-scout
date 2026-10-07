@@ -18,16 +18,34 @@ If DEMO_MODE is on, returns a realistic fake report instead.
 
 import base64
 import json
+import logging
 import os
 from pathlib import Path
 
-import requests
-
 import demo_data
+import gemini
 import settings
 
-API_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
-          "{model}:generateContent")
+log = logging.getLogger("dealscout")
+
+# What the page shows, by the kind of failure gemini.py reports.
+MESSAGES = {
+    "timeout": "The photo check took too long to answer, so this result "
+               "skips it. Try again in a minute.",
+    "network": "Couldn't reach Google for the photo check, so this result "
+               "skips it. Check your connection and try again.",
+    "refused": "Google turned down the photo check request, so this result "
+               "skips it. If it keeps happening, check GEMINI_API_KEY in "
+               "your .env file.",
+    "limit": "Google's limit for your key was reached, so this result skips "
+             "the photo check. Try again later.",
+    "server": "Google had a problem on its side, so this result skips the "
+              "photo check. Try again in a minute.",
+    "blocked": "Google blocked the photo check for this listing, so this "
+               "result skips it.",
+    "shape": "The photo check answer came back in a form the tool can't "
+             "read, so this result skips it. Try again.",
+}
 
 _MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                 ".png": "image/png", ".webp": "image/webp",
@@ -87,38 +105,24 @@ def analyze(title: str, price: float, description: str,
         title=title, price=price, description=(description or "(none)")[:3000])})
 
     try:
-        r = requests.post(
-            API_URL.format(model=settings.GEMINI_MODEL),
-            params={"key": api_key},
-            headers={"content-type": "application/json"},
-            json={"contents": [{"parts": parts}],
-                  "generationConfig": {"maxOutputTokens": 1000}},
-            timeout=90)
-        r.raise_for_status()
-        data = r.json()
-        candidates = data.get("candidates", [])
-        if not candidates:
-            reason = data.get("promptFeedback", {}).get(
-                "blockReason", "no response returned")
-            return _error_report(f"Photo analysis didn't return a result "
-                                 f"({reason}). Try again, or check the "
-                                 f"photos aren't unusually large.")
-        response_parts = candidates[0].get("content", {}).get("parts", [])
-        text = "".join(p.get("text", "") for p in response_parts)
-        text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        text = gemini.generate(api_key, parts, max_tokens=1000, timeout=90)
+    except gemini.GeminiError as e:
+        log.warning("Photo check failed: %s", e.detail)
+        return _error_report(MESSAGES[e.kind])
+    text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    try:
         report = json.loads(text)
-        # Make sure every field the results page expects is present:
-        report.setdefault("condition", "Unknown")
-        report.setdefault("condition_grade", "Unknown")
-        report.setdefault("red_flags", [])
-        report.setdefault("missing_info", [])
-        report.setdefault("category_guess", None)
-        report.setdefault("resale_title_suggestion", title)
-        return report
-    except requests.RequestException as e:
-        return _error_report(f"Photo analysis failed (network/API): {e}")
-    except (json.JSONDecodeError, KeyError, IndexError) as e:
-        return _error_report(f"Photo analysis returned an unexpected format: {e}")
+    except ValueError:
+        log.warning("Photo check failed: unreadable answer")
+        return _error_report(MESSAGES["shape"])
+    # Make sure every field the results page expects is present:
+    report.setdefault("condition", "Unknown")
+    report.setdefault("condition_grade", "Unknown")
+    report.setdefault("red_flags", [])
+    report.setdefault("missing_info", [])
+    report.setdefault("category_guess", None)
+    report.setdefault("resale_title_suggestion", title)
+    return report
 
 
 def _error_report(msg: str) -> dict:

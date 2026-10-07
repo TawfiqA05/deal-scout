@@ -7,13 +7,9 @@ Nothing in this tool ever sends a message automatically.
 
 import os
 
-import requests
-
 import demo_data
+import gemini
 import settings
-
-API_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
-          "{model}:generateContent")
 
 PROMPT = """Write a short marketplace negotiation message for me to send to a seller.
 
@@ -47,25 +43,13 @@ def draft_message(title: str, asking_price: float, offer: float,
 
     questions = "; ".join(missing_info[:3]) if missing_info else "(none)"
     try:
-        r = requests.post(
-            API_URL.format(model=settings.GEMINI_MODEL),
-            params={"key": api_key},
-            headers={"content-type": "application/json"},
-            json={"contents": [{"parts": [{"text": PROMPT.format(
-                      title=title, asking=asking_price, offer=f"{offer:.0f}",
-                      condition=condition or "(unknown)",
-                      questions=questions)}]}],
-                  "generationConfig": {"maxOutputTokens": 300}},
-            timeout=60)
-        r.raise_for_status()
-        candidates = r.json().get("candidates", [])
-        if not candidates:
-            return _template(title, offer)
-        parts = candidates[0].get("content", {}).get("parts", [])
-        text = "".join(p.get("text", "") for p in parts)
-        return text.strip() or _template(title, offer)
-    except (requests.RequestException, KeyError, IndexError):
+        text = gemini.generate(api_key, [{"text": PROMPT.format(
+            title=title, asking=asking_price, offer=f"{offer:.0f}",
+            condition=condition or "(unknown)", questions=questions)}],
+            max_tokens=300, timeout=60)
+    except gemini.GeminiError:
         return _template(title, offer)
+    return text.strip() or _template(title, offer)
 
 
 def _template(title: str, offer: float) -> str:
