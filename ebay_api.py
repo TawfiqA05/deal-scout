@@ -4,8 +4,8 @@ Handles: logging into eBay's API (OAuth2), searching comparable ACTIVE
 listings, and pulling details from an eBay listing URL (via the official
 API — no scraping).
 
-If DEMO_MODE is on in settings.py, everything here returns realistic
-fake data so you can test without keys.
+In demo mode everything here returns made-up data and makes no network
+calls, so it works without keys.
 """
 
 import base64
@@ -41,8 +41,8 @@ def _get_token() -> str:
     client_secret = os.environ.get("EBAY_CLIENT_SECRET", "")
     if not client_id or not client_secret:
         raise EbayError("eBay keys missing. Add EBAY_CLIENT_ID and "
-                        "EBAY_CLIENT_SECRET to your .env file, or turn on "
-                        "DEMO_MODE in settings.py.")
+                        "EBAY_CLIENT_SECRET to your .env file, or set "
+                        "DEALSCOUT_DEMO_MODE=on in .env to use demo data.")
 
     creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     try:

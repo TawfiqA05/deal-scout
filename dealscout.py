@@ -31,6 +31,7 @@ APP_DIR = Path(__file__).parent
 # DEALSCOUT_ENV_FILE has to come from the shell, since it says which .env to load.
 ENV_FILE = Path(os.environ.get("DEALSCOUT_ENV_FILE") or APP_DIR / ".env")
 load_dotenv(ENV_FILE)
+settings.apply_demo_mode_from_env()
 database.init_db()
 
 app = Flask(__name__)
@@ -228,14 +229,20 @@ def history():
                            demo_mode=settings.DEMO_MODE)
 
 
+def startup_message() -> str:
+    lines = [f"\nDeal Scout is starting at http://localhost:{settings.PORT}"]
+    if settings.DEMO_MODE:
+        lines.append("Demo mode is on, so all data is made up. Set "
+                     "DEALSCOUT_DEMO_MODE=off in .env when your API keys "
+                     "are ready.\n")
+    return "\n".join(lines)
+
+
 def _open_browser():
     webbrowser.open(f"http://localhost:{settings.PORT}")
 
 
 if __name__ == "__main__":
-    print(f"\nDeal Scout is starting at http://localhost:{settings.PORT}")
-    if settings.DEMO_MODE:
-        print("DEMO MODE is ON — all data is fake. Turn it off in "
-              "settings.py when your API keys are ready.\n")
+    print(startup_message())
     Timer(1.0, _open_browser).start()
     app.run(port=settings.PORT, debug=False)

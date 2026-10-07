@@ -33,7 +33,7 @@ they appear. It's a decision aid, not a guarantee.
 
 ## Running it for real
 1. Copy `.env.example` to `.env`, add your eBay Client ID/Secret (developer.ebay.com) and a free Gemini key (aistudio.google.com)
-2. Set `DEMO_MODE = False` in `settings.py`
+2. In `.env`, change `DEALSCOUT_DEMO_MODE=on` to `DEALSCOUT_DEMO_MODE=off`
 3. `python dealscout.py`
 
 ## If I came back to it

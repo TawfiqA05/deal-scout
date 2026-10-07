@@ -3,11 +3,26 @@ Deal Scout settings — every number you might want to change lives here.
 Edit this file with any text editor. No coding knowledge needed.
 """
 
+import os
+
 # ── Demo mode ────────────────────────────────────────────────────────────
 # True  = the tool uses realistic FAKE data so you can try everything
 #         without any API keys.
 # False = real mode. Requires eBay + Anthropic keys in your .env file.
+# DEALSCOUT_DEMO_MODE=off in .env overrides this; see apply_demo_mode_from_env.
 DEMO_MODE = True
+
+
+def apply_demo_mode_from_env() -> None:
+    """Set DEMO_MODE from DEALSCOUT_DEMO_MODE (on or off). dealscout.py imports
+    this module before it loads .env, so it calls this after load_dotenv().
+    A missing or unknown value leaves DEMO_MODE as it is."""
+    global DEMO_MODE
+    value = os.environ.get("DEALSCOUT_DEMO_MODE", "").strip().lower()
+    if value in ("off", "false", "0", "no"):
+        DEMO_MODE = False
+    elif value in ("on", "true", "1", "yes"):
+        DEMO_MODE = True
 
 # ── Your profit bar ──────────────────────────────────────────────────────
 # A deal is only a BUY if BOTH of these are met (after fees + shipping):

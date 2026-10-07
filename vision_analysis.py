@@ -72,10 +72,11 @@ def analyze(title: str, price: float, description: str,
 
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        return _error_report("Gemini API key missing — add GEMINI_API_KEY "
+        return _error_report("Gemini API key missing. Add GEMINI_API_KEY "
                              "to your .env file (free at "
-                             "aistudio.google.com), or turn on DEMO_MODE "
-                             "in settings.py.")
+                             "aistudio.google.com), or set "
+                             "DEALSCOUT_DEMO_MODE=on in .env to use demo "
+                             "data.")
 
     parts = []
     for p in photo_paths[:settings.MAX_PHOTOS]:
