@@ -125,8 +125,10 @@ class ErrorPage(AppTestCase):
                                side_effect=OSError("disk gone")), \
                 self.assertLogs(dealscout.app.logger, "ERROR"):
             response = self.client.get("/history")
+        html = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 500)
-        self.assertNotIn("disk gone", response.get_data(as_text=True))
+        self.assertIn(ERROR_LINE, html)
+        self.assertNotIn("disk gone", html)
 
 
 if __name__ == "__main__":

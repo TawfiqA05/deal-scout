@@ -259,8 +259,7 @@ def error_page(e):
                              request.method, request.path)
         code = 500
     try:
-        return render_template("error.html", demo_mode=settings.DEMO_MODE,
-                               not_found=code == 404), code
+        return render_template("error.html", not_found=code == 404), code
     except Exception:
         app.logger.exception("The error page failed too")
         return "Something went wrong", code, {"Content-Type": "text/plain"}
