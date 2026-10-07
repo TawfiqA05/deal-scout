@@ -64,7 +64,7 @@
             {% endif %}
 
             <p class="detail-grid">
-              <span><strong>Category guess:</strong> {{ r.category_guess or '—' }}</span>
+              <span><strong>Category guess:</strong> {{ 'other' if r.category_guess == 'default' else (r.category_guess or '—') }}</span>
               <span><strong>Size class:</strong> {{ r.size_class or '—' }}</span>
               <span><strong>Fee assumed:</strong> {% if r.fee_percent %}{{ r.fee_percent }}%{% else %}—{% endif %}</span>
               <span><strong>Shipping assumed:</strong> {% if r.shipping_est %}${{ '%.0f'|format(r.shipping_est) }}{% else %}—{% endif %}</span>

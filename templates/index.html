@@ -116,6 +116,7 @@
 
     <label for="ebay_url">eBay listing URL <span class="hint">(eBay only — details pull automatically)</span></label>
     <input type="text" id="ebay_url" name="ebay_url" placeholder="https://www.ebay.com/itm/...">
+    {% if demo_mode %}<p class="hint demo-note">In demo mode, any eBay link loads the same sample listing, a DeWalt drill kit.</p>{% endif %}
 
     <div class="divider"><span>or enter details yourself (Facebook Marketplace, Craigslist, OfferUp…)</span></div>
 

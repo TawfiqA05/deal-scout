@@ -16,6 +16,7 @@ import time
 
 import requests
 
+import demo_data
 import settings
 
 EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
@@ -107,13 +108,8 @@ def fetch_listing_from_url(url: str) -> dict:
     """Given an eBay listing URL, pull its details via the official API.
     Returns {title, asking_price, description, image_urls}."""
     if settings.DEMO_MODE:
-        return {
-            "title": "DEMO: DeWalt 20V Max Cordless Drill Kit (from URL)",
-            "asking_price": 55.00,
-            "description": "Demo listing pulled from an eBay URL. Includes "
-                           "battery and charger, light cosmetic wear.",
-            "image_urls": [],
-        }
+        # Any link gives the same sample listing; the form says so.
+        return {**demo_data.SAMPLE_LISTING, "image_urls": []}
 
     item_id = extract_item_id(url)
     if not item_id:
@@ -162,12 +158,9 @@ def _demo_comps(query: str, asking_price: float) -> list[dict]:
     same comps. Uses its own generator and leaves the global one alone."""
     rng = random.Random(f"{query}|{asking_price:.2f}")
     base = asking_price * rng.uniform(*DEMO_PRICE_RATIO)
-    comps = []
-    for i in range(14):
-        price = round(base * rng.uniform(0.75, 1.35), 2)
-        comps.append({
-            "title": f"DEMO comp {i + 1} for: {query[:40]}",
-            "price": price,
-            "url": "https://www.ebay.com",
-        })
-    return comps
+    prices = [round(base * rng.uniform(0.75, 1.35), 2) for _ in range(14)]
+    # Titles get their own generator so they never shift the prices.
+    titles = demo_data.comp_titles(
+        query, len(prices), random.Random(f"titles|{query}|{asking_price:.2f}"))
+    return [{"title": t, "price": p, "url": "https://www.ebay.com"}
+            for t, p in zip(titles, prices)]

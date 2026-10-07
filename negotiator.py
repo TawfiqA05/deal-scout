@@ -9,6 +9,7 @@ import os
 
 import requests
 
+import demo_data
 import settings
 
 API_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
@@ -38,9 +39,7 @@ def draft_message(title: str, asking_price: float, offer: float,
     """Returns the draft message text. Falls back to a simple template
     if the API isn't available — never crashes."""
     if settings.DEMO_MODE:
-        return (f"Hey! Is the {title.replace('DEMO: ', '')} still available? "
-                f"I can pick it up today and pay cash — would you take "
-                f"${offer:.0f}? Also, does the battery still hold a charge?")
+        return demo_data.negotiation_message(title, offer)
 
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:

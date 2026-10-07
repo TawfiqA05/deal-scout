@@ -23,6 +23,7 @@ from pathlib import Path
 
 import requests
 
+import demo_data
 import settings
 
 API_URL = ("https://generativelanguage.googleapis.com/v1beta/models/"
@@ -67,17 +68,7 @@ def analyze(title: str, price: float, description: str,
     """Returns the vision report dict. Never crashes the app — on any
     failure it returns a report explaining what went wrong."""
     if settings.DEMO_MODE:
-        return {
-            "condition": "DEMO: Light cosmetic wear on the casing; appears "
-                         "fully functional in photos.",
-            "condition_grade": "Good",
-            "red_flags": ["DEMO: Serial number sticker partially removed",
-                          "DEMO: Stock photo used for one of the images"],
-            "missing_info": ["DEMO: Ask whether the battery holds a charge",
-                             "DEMO: Ask for a photo of it powered on"],
-            "category_guess": "tools",
-            "resale_title_suggestion": f"DEMO resale title for: {title[:50]}",
-        }
+        return demo_data.vision_report(title)
 
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
