@@ -62,11 +62,12 @@ def _get_token() -> str:
     return _token_cache["token"]
 
 
-def search_comps(query: str) -> list[dict]:
+def search_comps(query: str, asking_price: float) -> list[dict]:
     """Search eBay for comparable ACTIVE listings.
-    Returns a list of {title, price, url}."""
+    Returns a list of {title, price, url}. The asking price is only used
+    by demo mode, to price the made-up comps around it."""
     if settings.DEMO_MODE:
-        return _demo_comps(query)
+        return _demo_comps(query, asking_price)
 
     token = _get_token()
     try:
@@ -149,13 +150,21 @@ def fetch_listing_from_url(url: str) -> dict:
     }
 
 
-def _demo_comps(query: str) -> list[dict]:
-    """Realistic fake comps for demo mode."""
-    random.seed(query)  # same query → same fake data, so testing is consistent
-    base = random.uniform(60, 160)
+# Demo comps center on the asking price times a ratio drawn from this
+# range. The low end gives PASS and the high end BUY, with a NEGOTIATE
+# band between them whose place shifts with the price and shipping.
+DEMO_PRICE_RATIO = (0.8, 2.4)
+
+
+def _demo_comps(query: str, asking_price: float) -> list[dict]:
+    """Made-up comps for demo mode, priced around the asking price.
+    Seeded from the query and price, so the same input always gives the
+    same comps. Uses its own generator and leaves the global one alone."""
+    rng = random.Random(f"{query}|{asking_price:.2f}")
+    base = asking_price * rng.uniform(*DEMO_PRICE_RATIO)
     comps = []
     for i in range(14):
-        price = round(base * random.uniform(0.75, 1.35), 2)
+        price = round(base * rng.uniform(0.75, 1.35), 2)
         comps.append({
             "title": f"DEMO comp {i + 1} for: {query[:40]}",
             "price": price,

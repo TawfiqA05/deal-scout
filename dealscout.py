@@ -161,7 +161,7 @@ def analyze():
     # ── 5. Find comparable eBay listings ────────────────────────────────
     search_query = vision.get("resale_title_suggestion") or title
     try:
-        comps = ebay_api.search_comps(search_query)
+        comps = ebay_api.search_comps(search_query, asking_price)
     except ebay_api.EbayError as e:
         comps = []
         warnings.append(str(e))
