@@ -1,7 +1,6 @@
 """
-Deal Scout database — saves every listing you analyze into a local
-SQLite file (deal_scout.db) so you have a searchable history.
-You never need to touch this file; it manages itself.
+SQLite storage for analysis history, one row per analyzed listing.
+The table is created on first run.
 """
 
 import json

@@ -43,8 +43,8 @@ MAX_PHOTO_BYTES = int(4.5 * 1024 * 1024)   # photo analysis API limit
 
 
 def _download_image(url: str) -> Path | None:
-    """Download one eBay listing image so Claude Vision can look at it.
-    Returns the saved path, or None if anything went wrong (never crashes)."""
+    """Download one eBay listing image for the photo check.
+    Returns the saved path, or None if the download fails."""
     try:
         r = requests.get(url, timeout=15)
         r.raise_for_status()
@@ -73,7 +73,7 @@ def home():
 def analyze():
     warnings = []
 
-    # ── 1. Get the listing details ──────────────────────────────────────
+    # Listing details come from the eBay URL if there is one, else the form.
     ebay_url = (request.form.get("ebay_url") or "").strip()
     source = "ebay_url" if ebay_url else "manual"
 
@@ -112,14 +112,14 @@ def analyze():
 
     size_class = request.form.get("size_class") or "medium"
 
-    # ── 2. Have you already scored this exact item recently? ────────────
+    # Same title and price scored in the last 14 days gets a warning.
     dup = database.recent_duplicate(title, asking_price)
     if dup:
         warnings.append(f"You already analyzed this exact item on "
                         f"{dup['analyzed_at'][:10]} — verdict was "
                         f"{dup['verdict']}. Showing a fresh analysis anyway.")
 
-    # ── 3. Gather photos: uploads first, then eBay's own listing images ──
+    # Uploaded photos first, then the eBay listing's own images.
     photo_paths = []
     for f in request.files.getlist("photos"):
         if not f or not f.filename:
@@ -143,7 +143,6 @@ def analyze():
             continue
         photo_paths.append(path)
 
-    # Download the listing's own images if this came from an eBay URL
     for img_url in ebay_image_urls[:settings.MAX_PHOTOS - len(photo_paths)]:
         saved = _download_image(img_url)
         if saved:
@@ -153,13 +152,13 @@ def analyze():
         warnings.append("Couldn't download the listing's photos from eBay — "
                         "the analysis ran on the text only.")
 
-    # ── 4. Photo/description analysis (Claude Vision) ───────────────────
+    # Gemini reads the photos and description. Demo mode makes up notes.
     vision = vision_analysis.analyze(title, asking_price, description,
                                      photo_paths)
     if vision.get("error"):
         warnings.append(vision["error"])
 
-    # ── 5. Find comparable eBay listings ────────────────────────────────
+    # Comps are searched by Gemini's resale title when it gives one.
     search_query = vision.get("resale_title_suggestion") or title
     try:
         comps = ebay_api.search_comps(search_query, asking_price)
@@ -167,20 +166,18 @@ def analyze():
         comps = []
         warnings.append(str(e))
 
-    # ── 6. Score it ──────────────────────────────────────────────────────
     result = scoring.score_deal(asking_price,
                                 [c["price"] for c in comps],
                                 vision.get("category_guess"),
                                 size_class)
 
-    # ── 7. Draft a negotiation message if it's a NEGOTIATE ──────────────
+    # Only a NEGOTIATE verdict gets a draft message.
     negotiation_draft = None
     if result["verdict"] == "NEGOTIATE" and result["suggested_offer"]:
         negotiation_draft = negotiator.draft_message(
             title, asking_price, result["suggested_offer"],
             vision.get("condition"), vision.get("missing_info", []))
 
-    # ── 8. Save to history ───────────────────────────────────────────────
     database.save_listing({
         "source": source, "title": title, "asking_price": asking_price,
         "url": ebay_url or None, "description": description,
@@ -198,7 +195,6 @@ def analyze():
         "negotiation_draft": negotiation_draft,
     })
 
-    # ── 9. Show the results ──────────────────────────────────────────────
     return render_template("index.html",
                            demo_mode=settings.DEMO_MODE,
                            settings=settings,
