@@ -8,6 +8,7 @@ Then open http://localhost:5001 in your browser.
 Receiver occupies port 5000 and blocks "localhost" requests there.)
 """
 
+import math
 import os
 import time
 import uuid
@@ -18,6 +19,7 @@ from threading import Timer
 import requests
 from dotenv import load_dotenv
 from flask import Flask, render_template, request
+from werkzeug.exceptions import HTTPException
 
 import database
 import ebay_api
@@ -36,10 +38,20 @@ database.init_db()
 
 app = Flask(__name__)
 UPLOAD_DIR = Path(os.environ.get("DEALSCOUT_UPLOADS_DIR") or APP_DIR / "uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+try:
+    UPLOAD_DIR.mkdir(exist_ok=True)
+except OSError:
+    pass  # analyze() tries again and warns if photos can't be saved
 
 ALLOWED_PHOTO_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_PHOTO_BYTES = int(4.5 * 1024 * 1024)   # photo analysis API limit
+MAX_ASKING_PRICE = 1_000_000
+
+
+def _usable_price(price: float) -> bool:
+    """float() accepts "nan" and "inf", and nan slips past a <= 0 check,
+    so check for a finite number in range."""
+    return math.isfinite(price) and 0 < price <= MAX_ASKING_PRICE
 
 
 def _download_image(url: str) -> Path | None:
@@ -55,9 +67,10 @@ def _download_image(url: str) -> Path | None:
         if not suffix or len(r.content) > MAX_PHOTO_BYTES:
             return None
         path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         path.write_bytes(r.content)
         return path
-    except requests.RequestException:
+    except (requests.RequestException, OSError):
         return None
 
 
@@ -89,7 +102,7 @@ def analyze():
         asking_price = details["asking_price"]
         description = details["description"]
         ebay_image_urls = details.get("image_urls", [])
-        if asking_price <= 0:
+        if not _usable_price(asking_price):
             return render_template(
                 "index.html", demo_mode=settings.DEMO_MODE,
                 settings=settings, result=None,
@@ -104,7 +117,7 @@ def analyze():
             asking_price = float(request.form.get("asking_price") or 0)
         except ValueError:
             asking_price = 0
-        if not title or asking_price <= 0:
+        if not title or not _usable_price(asking_price):
             return render_template("index.html", demo_mode=settings.DEMO_MODE,
                                    settings=settings, result=None,
                                    error="Please enter at least a title and "
@@ -121,8 +134,9 @@ def analyze():
 
     # Uploaded photos first, then the eBay listing's own images.
     photo_paths = []
+    uploads_failed = False
     for f in request.files.getlist("photos"):
-        if not f or not f.filename:
+        if not f or not f.filename or uploads_failed:
             continue
         if len(photo_paths) >= settings.MAX_PHOTOS:
             warnings.append(f"Only the first {settings.MAX_PHOTOS} photos "
@@ -134,8 +148,17 @@ def analyze():
                             f"this tool understands.")
             continue
         path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
-        f.save(path)
-        if path.stat().st_size > MAX_PHOTO_BYTES:
+        try:
+            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            f.save(path)
+            size = path.stat().st_size
+        except OSError:
+            # Folder gone and can't be made, or read-only.
+            uploads_failed = True
+            warnings.append("Couldn't save the uploaded photos, so the "
+                            "check ran without them.")
+            continue
+        if size > MAX_PHOTO_BYTES:
             path.unlink(missing_ok=True)
             warnings.append(f"Skipped '{f.filename}' — larger than the "
                             f"~4.5MB limit the photo analysis accepts. "
@@ -223,6 +246,24 @@ def history():
     return render_template("history.html", rows=rows,
                            active_filter=verdict or "ALL",
                            demo_mode=settings.DEMO_MODE)
+
+
+@app.errorhandler(Exception)
+def error_page(e):
+    """One plain page for anything unexpected. The traceback goes to the
+    terminal, never to the browser."""
+    if isinstance(e, HTTPException):
+        code = e.code or 500
+    else:
+        app.logger.exception("Unhandled error on %s %s",
+                             request.method, request.path)
+        code = 500
+    try:
+        return render_template("error.html", demo_mode=settings.DEMO_MODE,
+                               not_found=code == 404), code
+    except Exception:
+        app.logger.exception("The error page failed too")
+        return "Something went wrong", code, {"Content-Type": "text/plain"}
 
 
 def startup_message() -> str:

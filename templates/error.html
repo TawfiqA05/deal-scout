@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal Scout</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">DS</span>
+    <h1>Deal Scout</h1>
+  </div>
+  <nav>
+    <a href="/">Analyze</a>
+    <a href="/history">History</a>
+  </nav>
+  {% if demo_mode %}<span class="demo-pill">DEMO MODE — data is fake</span>{% endif %}
+</header>
+
+<main>
+<section class="card">
+  {% if not_found %}
+  <h2>Page not found</h2>
+  <p>There's no page at this address.</p>
+  {% else %}
+  <h2>Something went wrong</h2>
+  <p>Deal Scout hit an error and couldn't finish that. The details are in the terminal where it's running.</p>
+  {% endif %}
+  <a class="btn-secondary" href="/">Back to Deal Scout</a>
+</section>
+</main>
+
+</body>
+</html>
