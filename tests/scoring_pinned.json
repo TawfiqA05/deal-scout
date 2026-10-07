@@ -1,0 +1,171 @@
+[
+  {
+    "input": {
+      "asking_price": 40.0,
+      "category_guess": "tools",
+      "comp_prices": [
+        95,
+        110,
+        120,
+        105,
+        99,
+        130,
+        88,
+        115,
+        101,
+        125
+      ],
+      "size_class": "medium"
+    },
+    "output": {
+      "comps": {
+        "count": 10,
+        "high": 107.5,
+        "low": 99,
+        "median": 107.5
+      },
+      "est_profit_high": 40.48,
+      "est_profit_low": 33.14,
+      "fee_percent": 13.6,
+      "reason": "Even at the conservative resale estimate ($99.00), this clears your $25/30% profit bar at full asking price.",
+      "shipping_est": 12.0,
+      "suggested_offer": null,
+      "verdict": "BUY"
+    }
+  },
+  {
+    "input": {
+      "asking_price": 85.0,
+      "category_guess": "Electronics > Headphones",
+      "comp_prices": [
+        120,
+        135,
+        128,
+        140,
+        150,
+        118,
+        132,
+        126,
+        138,
+        145,
+        160,
+        110
+      ],
+      "size_class": "small"
+    },
+    "output": {
+      "comps": {
+        "count": 12,
+        "high": 133.5,
+        "low": 120,
+        "median": 133.5
+      },
+      "est_profit_high": 24.41,
+      "est_profit_low": 12.7,
+      "fee_percent": 13.25,
+      "reason": "Doesn't clear your profit bar at $85.00, but does at $71.40 \u2014 that's within a realistic negotiation range. Suggested opening offer: $68.",
+      "shipping_est": 6.0,
+      "suggested_offer": 68.0,
+      "verdict": "NEGOTIATE"
+    }
+  },
+  {
+    "input": {
+      "asking_price": 200.0,
+      "category_guess": "sneakers",
+      "comp_prices": [
+        180,
+        210,
+        195,
+        205,
+        220,
+        190,
+        199,
+        230
+      ],
+      "size_class": "medium"
+    },
+    "output": {
+      "comps": {
+        "count": 8,
+        "high": 202.0,
+        "low": 190,
+        "median": 202.0
+      },
+      "est_profit_high": -26.56,
+      "est_profit_low": -37.6,
+      "fee_percent": 8.0,
+      "reason": "Even at 25% below asking, this doesn't clear your $25/30% profit bar using the conservative resale estimate. Not worth your time.",
+      "shipping_est": 12.0,
+      "suggested_offer": null,
+      "verdict": "PASS"
+    }
+  },
+  {
+    "input": {
+      "asking_price": 60.0,
+      "category_guess": null,
+      "comp_prices": [],
+      "size_class": "large"
+    },
+    "output": {
+      "comps": {
+        "count": 0,
+        "high": null,
+        "low": null,
+        "median": null
+      },
+      "est_profit_high": null,
+      "est_profit_low": null,
+      "fee_percent": 13.6,
+      "reason": "No comparable listings found \u2014 can't estimate resale value, so there's no basis for a buy decision.",
+      "shipping_est": 25.0,
+      "suggested_offer": null,
+      "verdict": "PASS"
+    }
+  },
+  {
+    "input": {
+      "asking_price": 300.0,
+      "category_guess": "furniture",
+      "comp_prices": [
+        520,
+        480,
+        610,
+        455,
+        700,
+        390,
+        505,
+        530,
+        495,
+        1200,
+        150,
+        560,
+        515,
+        470,
+        540,
+        610,
+        480,
+        500,
+        525,
+        499
+      ],
+      "size_class": "freight"
+    },
+    "output": {
+      "comps": {
+        "count": 20,
+        "high": 510.0,
+        "low": 480,
+        "median": 510.0
+      },
+      "est_profit_high": 20.24,
+      "est_profit_low": -5.68,
+      "fee_percent": 13.6,
+      "reason": "Doesn't clear your profit bar at $300.00, but does at $222.00 \u2014 that's within a realistic negotiation range. Suggested opening offer: $211.",
+      "shipping_est": 120.0,
+      "suggested_offer": 211.0,
+      "verdict": "NEGOTIATE"
+    }
+  }
+]

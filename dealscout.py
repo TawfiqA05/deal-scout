@@ -8,6 +8,7 @@ Then open http://localhost:5001 in your browser.
 Receiver occupies port 5000 and blocks "localhost" requests there.)
 """
 
+import os
 import time
 import uuid
 import webbrowser
@@ -25,11 +26,15 @@ import scoring
 import settings
 import vision_analysis
 
-load_dotenv()  # reads your .env file so the API keys are available
+APP_DIR = Path(__file__).parent
+
+# DEALSCOUT_ENV_FILE has to come from the shell, since it says which .env to load.
+ENV_FILE = Path(os.environ.get("DEALSCOUT_ENV_FILE") or APP_DIR / ".env")
+load_dotenv(ENV_FILE)
 database.init_db()
 
 app = Flask(__name__)
-UPLOAD_DIR = Path(__file__).parent / "uploads"
+UPLOAD_DIR = Path(os.environ.get("DEALSCOUT_UPLOADS_DIR") or APP_DIR / "uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 ALLOWED_PHOTO_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}

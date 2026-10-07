@@ -5,15 +5,22 @@ You never need to touch this file; it manages itself.
 """
 
 import json
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "deal_scout.db"
+DEFAULT_DB_PATH = Path(__file__).parent / "deal_scout.db"
+
+
+def db_path() -> Path:
+    """DEALSCOUT_DB_PATH overrides the default file next to the code.
+    Read on every call so tests can point it at a temp file."""
+    return Path(os.environ.get("DEALSCOUT_DB_PATH") or DEFAULT_DB_PATH)
 
 
 def _connect():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(db_path())
     conn.row_factory = sqlite3.Row
     return conn
 
