@@ -46,6 +46,10 @@ MESSAGES = {
                 "this result skips the photo check.",
 }
 
+# The most of the title that goes to Google (the description is cut at
+# 3000), so a long title can't push the request past its size limit.
+MAX_TITLE_CHARS = 300
+
 # Room for the report, with thinking at its lowest. Thinking counts
 # against this limit too.
 MAX_OUTPUT_TOKENS = 8192
@@ -68,9 +72,10 @@ REPORT_SCHEMA = {
                  "category_guess", "resale_title_suggestion"],
 }
 
+# The image formats Google lists for Gemini.
 _MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                 ".png": "image/png", ".webp": "image/webp",
-                ".gif": "image/gif"}
+                ".heic": "image/heic", ".heif": "image/heif"}
 
 PROMPT = """You are helping a reseller evaluate a marketplace listing they might buy to flip.
 
@@ -117,13 +122,21 @@ def analyze(title: str, price: float, description: str,
                              "DEALSCOUT_DEMO_MODE=on in .env to use demo "
                              "data.")
 
-    parts = []
+    # dealscout.py keeps photos under MAX_TOTAL_PHOTO_BYTES already; this
+    # holds the line for any other caller, so the request stays under 20MB.
+    parts, photo_bytes = [], 0
     for p in photo_paths[:settings.MAX_PHOTOS]:
         block = _encode_photo(Path(p))
-        if block:
-            parts.append(block)
+        if not block:
+            continue
+        size = len(block["inlineData"]["data"]) * 3 // 4
+        if photo_bytes + size > settings.MAX_TOTAL_PHOTO_BYTES:
+            continue
+        photo_bytes += size
+        parts.append(block)
     parts.append({"text": PROMPT.format(
-        title=title, price=price, description=(description or "(none)")[:3000],
+        title=title[:MAX_TITLE_CHARS], price=price,
+        description=(description or "(none)")[:3000],
         categories=", ".join(settings.EBAY_CATEGORY_FEES))})
 
     try:

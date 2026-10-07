@@ -73,6 +73,10 @@ COMPS_TRIM_PERCENT = 10       # ignore the cheapest/priciest 10% (outliers)
 # key can't use it, gemini.py picks a Flash model from the model list.
 GEMINI_MODEL = "gemini-flash-latest"
 MAX_PHOTOS = 6                # analyze at most this many photos per listing
+# Google caps a request with inline photos at 20MB, text included, and
+# base64 makes photos a third bigger. 13 MB of photos comes to about 18.2MB
+# sent, which leaves room for the prompt.
+MAX_TOTAL_PHOTO_BYTES = 13 * 1024 * 1024
 
 # Web page
 PORT = 5001                   # the tool runs at http://localhost:5001

@@ -10,6 +10,7 @@ import os
 import demo_data
 import gemini
 import settings
+import vision_analysis
 
 # Room for a few sentences, with thinking at its lowest. Thinking counts
 # against this limit too.
@@ -48,7 +49,8 @@ def draft_message(title: str, asking_price: float, offer: float,
     questions = "; ".join(missing_info[:3]) if missing_info else "(none)"
     try:
         text = gemini.generate(api_key, [{"text": PROMPT.format(
-            title=title, asking=asking_price, offer=f"{offer:.0f}",
+            title=title[:vision_analysis.MAX_TITLE_CHARS], asking=asking_price,
+            offer=f"{offer:.0f}",
             condition=condition or "(unknown)", questions=questions)}],
             max_tokens=MAX_OUTPUT_TOKENS, timeout=60)
     except gemini.GeminiError:

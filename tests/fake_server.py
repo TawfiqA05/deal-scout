@@ -149,7 +149,7 @@ class _Handler(BaseHTTPRequestHandler):
         entry = {"method": self.command, "host": host, "path": path,
                  "query": parse_qs(query), "raw_query": query,
                  "headers": {k.lower(): v for k, v in self.headers.items()},
-                 "body": parsed}
+                 "body": parsed, "length": len(body)}
         self.server.requests.append(entry)
         return entry
 

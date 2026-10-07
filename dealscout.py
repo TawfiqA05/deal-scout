@@ -45,8 +45,10 @@ try:
 except OSError:
     pass  # analyze() tries again and warns if photos can't be saved
 
-ALLOWED_PHOTO_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+# The formats Google lists for Gemini. GIF isn't one of them.
+ALLOWED_PHOTO_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 MAX_PHOTO_BYTES = int(4.5 * 1024 * 1024)   # photo analysis API limit
+TOTAL_MB = settings.MAX_TOTAL_PHOTO_BYTES // (1024 * 1024)
 MAX_ASKING_PRICE = 1_000_000
 
 # Only pages served by the tool itself may use it. Another site open in the
@@ -67,24 +69,30 @@ def _usable_price(price: float) -> bool:
     return math.isfinite(price) and 0 < price <= MAX_ASKING_PRICE
 
 
-def _download_image(url: str) -> Path | None:
+def _download_image(url: str) -> tuple[bytes, str] | None:
     """Download one eBay listing image for the photo check.
-    Returns the saved path, or None if the download fails."""
+    Returns its bytes and file suffix, or None if the download fails or
+    the image isn't a format and size the photo check takes."""
     try:
         r = requests.get(url, timeout=15)
         r.raise_for_status()
-        content_type = r.headers.get("content-type", "")
-        suffix = {"image/jpeg": ".jpg", "image/png": ".png",
-                  "image/webp": ".webp", "image/gif": ".gif"}.get(
-                      content_type.split(";")[0].strip())
-        if not suffix or len(r.content) > MAX_PHOTO_BYTES:
-            return None
-        path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(r.content)
-        return path
-    except (requests.RequestException, OSError):
+    except requests.RequestException:
         return None
+    content_type = r.headers.get("content-type", "")
+    suffix = {"image/jpeg": ".jpg", "image/png": ".png",
+              "image/webp": ".webp", "image/heic": ".heic",
+              "image/heif": ".heif"}.get(content_type.split(";")[0].strip())
+    if not suffix or len(r.content) > MAX_PHOTO_BYTES:
+        return None
+    return r.content, suffix
+
+
+def _save_photo(data: bytes, suffix: str) -> Path:
+    """Write one photo to the uploads folder. Raises OSError if it can't."""
+    path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
 
 
 def _server_port() -> str:
@@ -202,6 +210,7 @@ def analyze():
 
     # Uploaded photos first, then the eBay listing's own images.
     photo_paths = []
+    photo_bytes = 0
     uploads_failed = False
     for f in request.files.getlist("photos"):
         if not f or not f.filename or uploads_failed:
@@ -212,8 +221,8 @@ def analyze():
             break
         suffix = Path(f.filename).suffix.lower()
         if suffix not in ALLOWED_PHOTO_TYPES:
-            warnings.append(f"Skipped '{f.filename}' — not a photo format "
-                            f"this tool understands.")
+            warnings.append(f"Skipped '{f.filename}'. The photo check takes "
+                            f"JPG, PNG, WebP and HEIC photos only.")
             continue
         path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
         try:
@@ -232,12 +241,32 @@ def analyze():
                             f"~4.5MB limit the photo analysis accepts. "
                             f"Use a smaller copy or a screenshot of it.")
             continue
+        if photo_bytes + size > settings.MAX_TOTAL_PHOTO_BYTES:
+            path.unlink(missing_ok=True)
+            warnings.append(f"Skipped '{f.filename}' because the photos "
+                            f"together would go over {TOTAL_MB} MB, the most "
+                            f"the photo check can send.")
+            continue
+        photo_bytes += size
         photo_paths.append(path)
 
+    listing_photos_left_out = False
     for img_url in ebay_image_urls[:settings.MAX_PHOTOS - len(photo_paths)]:
-        saved = _download_image(img_url)
-        if saved:
-            photo_paths.append(saved)
+        photo = _download_image(img_url)
+        if not photo:
+            continue
+        data, suffix = photo
+        if photo_bytes + len(data) > settings.MAX_TOTAL_PHOTO_BYTES:
+            listing_photos_left_out = True
+            continue
+        try:
+            photo_paths.append(_save_photo(data, suffix))
+        except OSError:
+            continue
+        photo_bytes += len(data)
+    if listing_photos_left_out:
+        warnings.append(f"Left out some of the listing's own photos to keep "
+                        f"the photo check under {TOTAL_MB} MB.")
     if ebay_image_urls and not any(
             p for p in photo_paths) and not settings.DEMO_MODE:
         warnings.append("Couldn't download the listing's photos from eBay — "
