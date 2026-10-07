@@ -1,5 +1,5 @@
 """
-Deal Scout negotiation drafter — powered by Google Gemini (free).
+Deal Scout negotiation drafter, using Google Gemini.
 When the verdict is NEGOTIATE, this writes a friendly, direct message
 with a specific offer number — FOR YOU TO REVIEW AND SEND YOURSELF.
 Nothing in this tool ever sends a message automatically.
@@ -10,6 +10,10 @@ import os
 import demo_data
 import gemini
 import settings
+
+# Room for a few sentences, with thinking at its lowest. Thinking counts
+# against this limit too.
+MAX_OUTPUT_TOKENS = 2048
 
 PROMPT = """Write a short marketplace negotiation message for me to send to a seller.
 
@@ -46,7 +50,7 @@ def draft_message(title: str, asking_price: float, offer: float,
         text = gemini.generate(api_key, [{"text": PROMPT.format(
             title=title, asking=asking_price, offer=f"{offer:.0f}",
             condition=condition or "(unknown)", questions=questions)}],
-            max_tokens=300, timeout=60)
+            max_tokens=MAX_OUTPUT_TOKENS, timeout=60)
     except gemini.GeminiError:
         return _template(title, offer)
     return text.strip() or _template(title, offer)

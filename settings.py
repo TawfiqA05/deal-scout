@@ -68,10 +68,10 @@ SHIPPING_ESTIMATES = {
 COMPS_TO_FETCH = 20           # how many active eBay listings to compare
 COMPS_TRIM_PERCENT = 10       # ignore the cheapest/priciest 10% (outliers)
 
-# AI model for photo analysis and negotiation drafts
-# Using Google Gemini's free tier — no credit card, no expiration.
-# Get a free key at aistudio.google.com
-GEMINI_MODEL = "gemini-2.5-flash"
+# Gemini model for the photo check and the offer draft.
+# gemini-flash-latest is Google's alias for its newest Flash model. If a
+# key can't use it, gemini.py picks a Flash model from the model list.
+GEMINI_MODEL = "gemini-flash-latest"
 MAX_PHOTOS = 6                # analyze at most this many photos per listing
 
 # Web page

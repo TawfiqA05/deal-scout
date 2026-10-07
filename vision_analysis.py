@@ -1,5 +1,5 @@
 """
-Deal Scout photo & description analysis — powered by Google Gemini (free).
+Deal Scout photo and description check, using Google Gemini.
 
 Sends the listing photos and text to Gemini and gets back:
   - a condition assessment
@@ -7,13 +7,8 @@ Sends the listing photos and text to Gemini and gets back:
   - what's missing that you should ask the seller
   - a category guess (used to pick the right eBay fee)
 
-Uses the free Gemini API — no credit card, no expiration (Google's free
-tier as of 2026: ~1,500 requests/day on the Flash model, which is far
-more than a reseller doing manual analyses would ever hit). The only
-tradeoff vs. a paid model: occasionally slightly less sharp on subtle
-condition judgment calls, but plenty good for this.
-
-If DEMO_MODE is on, returns a realistic fake report instead.
+The answer is JSON that follows REPORT_SCHEMA. If DEMO_MODE is on, this
+returns a made-up report instead and makes no network call.
 """
 
 import base64
@@ -43,8 +38,31 @@ MESSAGES = {
               "photo check. Try again in a minute.",
     "blocked": "Google blocked the photo check for this listing, so this "
                "result skips it.",
+    "cut_off": "The photo check answer was cut off, so this result skips "
+               "it. Try again.",
     "shape": "The photo check answer came back in a form the tool can't "
              "read, so this result skips it. Try again.",
+    "no_model": "No Gemini Flash model is open to your key right now, so "
+                "this result skips the photo check.",
+}
+
+# Room for the report, with thinking at its lowest. Thinking counts
+# against this limit too.
+MAX_OUTPUT_TOKENS = 8192
+
+REPORT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "condition": {"type": "string"},
+        "condition_grade": {"type": "string", "enum": [
+            "Like New", "Good", "Fair", "Poor", "Unknown"]},
+        "red_flags": {"type": "array", "items": {"type": "string"}},
+        "missing_info": {"type": "array", "items": {"type": "string"}},
+        "category_guess": {"type": "string"},
+        "resale_title_suggestion": {"type": "string"},
+    },
+    "required": ["condition", "condition_grade", "red_flags", "missing_info",
+                 "category_guess", "resale_title_suggestion"],
 }
 
 _MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -57,7 +75,7 @@ Listing title: {title}
 Asking price: ${price}
 Description: {description}
 
-Look at the photos (if any) and the text. Respond ONLY with JSON, no other text, no markdown code fences, in exactly this shape:
+Look at the photos (if any) and the text. Answer in JSON with these fields:
 {{
   "condition": "one short sentence on apparent condition",
   "condition_grade": "one of: Like New / Good / Fair / Poor / Unknown",
@@ -105,11 +123,11 @@ def analyze(title: str, price: float, description: str,
         title=title, price=price, description=(description or "(none)")[:3000])})
 
     try:
-        text = gemini.generate(api_key, parts, max_tokens=1000, timeout=90)
+        text = gemini.generate(api_key, parts, max_tokens=MAX_OUTPUT_TOKENS,
+                               timeout=90, json_schema=REPORT_SCHEMA)
     except gemini.GeminiError as e:
         log.warning("Photo check failed: %s", e.detail)
         return _error_report(MESSAGES[e.kind])
-    text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         report = json.loads(text)
     except ValueError:

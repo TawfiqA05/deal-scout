@@ -11,7 +11,7 @@ Gemini answers (server.gemini):
   "ok"            a photo report in the right shape, or a draft message
   "cut_off"       half a report with finishReason MAX_TOKENS
   "blocked"       no candidates and promptFeedback.blockReason SAFETY
-  "blocked_finish" a candidate stopped with finishReason SAFETY
+  "blocked_finish" part of an answer, stopped with finishReason SAFETY
   "top_list"      the whole answer is a JSON list
   "report_list"   the report text is a JSON list
   "report_string" the report text is a JSON string
@@ -202,14 +202,15 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, [{"candidates": []}])
         if mode == "blocked":
             return self._send(200, {"promptFeedback": {"blockReason": "SAFETY"}})
-        if mode == "blocked_finish":
-            return self._send(200, {"candidates": [{"finishReason": "SAFETY"}]})
         prompt = json.dumps(entry["body"])
         is_draft = "negotiation message" in prompt
         text = DRAFT_TEXT if is_draft else _report_text(mode)
-        if is_draft and mode == "cut_off":
+        if is_draft and mode in ("cut_off", "blocked_finish"):
             text = DRAFT_TEXT[:20]
-        finish = "MAX_TOKENS" if mode == "cut_off" else "STOP"
+        if not is_draft and mode == "blocked_finish":
+            text = _report_text("cut_off")
+        finish = {"cut_off": "MAX_TOKENS",
+                  "blocked_finish": "SAFETY"}.get(mode, "STOP")
         self._send(200, {"candidates": [{
             "content": {"role": "model", "parts": [{"text": text}]},
             "finishReason": finish}],
