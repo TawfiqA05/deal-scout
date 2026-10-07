@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests import TMP_DIR
+from tests.helpers import local_client
 
 import dealscout
 
@@ -62,7 +63,7 @@ class OldDatabaseOpensInHistory(unittest.TestCase):
         conn.close()
 
         with mock.patch.dict(os.environ, {"DEALSCOUT_DB_PATH": str(path)}):
-            client = dealscout.app.test_client()
+            client = local_client()
             page = client.get("/history").get_data(as_text=True)
             filtered = client.get("/history?verdict=NEGOTIATE").get_data(as_text=True)
 

@@ -8,7 +8,7 @@ import ebay_api
 import negotiator
 import settings
 import vision_analysis
-from tests.helpers import fresh_db
+from tests.helpers import fresh_db, local_client
 
 # Inputs a later run turns into tappable examples. Each gives one verdict.
 THREE_DEMO_INPUTS = [
@@ -117,7 +117,7 @@ class DemoPages(unittest.TestCase):
 
     def setUp(self):
         self.patcher, _ = fresh_db()
-        self.client = dealscout.app.test_client()
+        self.client = local_client()
 
     def tearDown(self):
         self.patcher.stop()

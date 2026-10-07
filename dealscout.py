@@ -8,8 +8,10 @@ Then open http://localhost:5001 in your browser.
 Receiver occupies port 5000 and blocks "localhost" requests there.)
 """
 
+import hmac
 import math
 import os
+import secrets
 import time
 import uuid
 import webbrowser
@@ -47,6 +49,17 @@ ALLOWED_PHOTO_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 MAX_PHOTO_BYTES = int(4.5 * 1024 * 1024)   # photo analysis API limit
 MAX_ASKING_PRICE = 1_000_000
 
+# Only pages served by the tool itself may use it. Another site open in the
+# same browser could otherwise post to /analyze, spend the API quota and
+# write history. The token changes on every start; the Host check keeps
+# another site from loading the page to read it.
+LOCAL_HOSTNAMES = ("localhost", "127.0.0.1", "[::1]")
+FORM_TOKEN = secrets.token_urlsafe(32)
+REFUSED_ORIGIN = ("Deal Scout turned that down because it came from another "
+                  "website. Use the form on this page instead.")
+REFUSED_TOKEN = ("This page was out of date, so nothing was analyzed. Fill in "
+                 "the form below and try again.")
+
 
 def _usable_price(price: float) -> bool:
     """float() accepts "nan" and "inf", and nan slips past a <= 0 check,
@@ -72,6 +85,61 @@ def _download_image(url: str) -> Path | None:
         return path
     except (requests.RequestException, OSError):
         return None
+
+
+def _server_port() -> str:
+    """The port the server is listening on, which may not be settings.PORT
+    if it was started some other way."""
+    return str(request.environ.get("SERVER_PORT") or settings.PORT)
+
+
+def _local_addresses() -> set[str]:
+    port = _server_port()
+    return {f"{name}:{port}" for name in LOCAL_HOSTNAMES}
+
+
+def _host_ok() -> bool:
+    return request.environ.get("HTTP_HOST", "").lower() in _local_addresses()
+
+
+def _origin_ok() -> bool:
+    """No Origin header is fine; the form token still has to match."""
+    origin = request.headers.get("Origin")
+    if origin is None:
+        return True
+    return origin.lower() in {f"http://{a}" for a in _local_addresses()}
+
+
+def _token_ok() -> bool:
+    sent = request.form.get("form_token", "")
+    return hmac.compare_digest(sent.encode(), FORM_TOKEN.encode())
+
+
+def _form_with_error(message: str, code: int):
+    return render_template("index.html", demo_mode=settings.DEMO_MODE,
+                           settings=settings, result=None,
+                           error=message), code
+
+
+@app.before_request
+def only_this_tool():
+    """Refuse requests from other sites before anything else runs. A wrong
+    Host gets the error page, without the form, so the token never goes
+    to a page that isn't this tool's."""
+    if not _host_ok():
+        return render_template(
+            "error.html", wrong_host=True,
+            local_address=f"http://localhost:{_server_port()}"), 400
+    if not _origin_ok():
+        return _form_with_error(REFUSED_ORIGIN, 403)
+    if request.method == "POST" and not _token_ok():
+        return _form_with_error(REFUSED_TOKEN, 403)
+    return None
+
+
+@app.context_processor
+def form_token():
+    return {"form_token": FORM_TOKEN}
 
 
 @app.route("/")

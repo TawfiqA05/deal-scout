@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests import TMP_DIR
-from tests.helpers import fresh_db
+from tests.helpers import fresh_db, local_client
 
 import database
 import dealscout
@@ -31,7 +31,7 @@ class AppTestCase(unittest.TestCase):
 
     def setUp(self):
         self.patcher, _ = fresh_db()
-        self.client = dealscout.app.test_client()
+        self.client = local_client()
 
     def tearDown(self):
         self.patcher.stop()

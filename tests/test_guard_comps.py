@@ -5,7 +5,7 @@ import html
 import unittest
 from unittest import mock
 
-from tests.helpers import RealModeTest, fresh_db
+from tests.helpers import RealModeTest, fresh_db, local_client
 
 import dealscout
 import ebay_api
@@ -108,7 +108,7 @@ class SearchTextInDemo(unittest.TestCase):
 
     def setUp(self):
         self.patcher, _ = fresh_db()
-        self.client = dealscout.app.test_client()
+        self.client = local_client()
 
     def tearDown(self):
         self.patcher.stop()

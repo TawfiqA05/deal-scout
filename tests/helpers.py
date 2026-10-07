@@ -12,6 +12,37 @@ from unittest import mock
 
 from tests import BLOCK_NETWORK_CODE, REPO_DIR, TMP_DIR
 
+from flask.testing import FlaskClient
+
+import settings
+
+# Flask's test client sends Host "localhost" with no port, which the tool
+# refuses. Tests talk to it at the address a browser would use.
+BASE_URL = f"http://localhost:{settings.PORT}"
+
+
+class LocalClient(FlaskClient):
+    """A test client that reaches the tool the way its own page does: at
+    BASE_URL, with the form token on every form POST unless the test gives
+    its own."""
+
+    def open(self, *args, **kwargs):
+        if not args or isinstance(args[0], str):
+            kwargs.setdefault("base_url", BASE_URL)
+            data = kwargs.get("data")
+            if kwargs.get("method") == "POST" and (
+                    data is None or isinstance(data, dict)):
+                import dealscout
+                kwargs["data"] = {"form_token": dealscout.FORM_TOKEN,
+                                  **(data or {})}
+        return super().open(*args, **kwargs)
+
+
+def local_client():
+    import dealscout
+    return LocalClient(dealscout.app, dealscout.app.response_class,
+                       use_cookies=True)
+
 
 def fresh_db():
     """Point the app at a new empty database for one test.
@@ -60,8 +91,7 @@ class RealModeTest(unittest.TestCase):
         root.setLevel(logging.DEBUG)
         self.addCleanup(root.removeHandler, handler)
         self.addCleanup(root.setLevel, old_level)
-        import dealscout
-        self.client = dealscout.app.test_client()
+        self.client = local_client()
 
     def analyze(self, **form):
         """Post the form and return the status and the page as plain text."""
