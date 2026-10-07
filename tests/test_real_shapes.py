@@ -60,7 +60,7 @@ class GeminiShapes(RealModeTest):
         self.assertEqual(report, {
             "condition": "Unknown", "condition_grade": "Unknown",
             "red_flags": [], "missing_info": ["Ask about the cable"],
-            "category_guess": None,
+            "category_guess": "default",
             "resale_title_suggestion": "Bose SoundLink Flex speaker"})
 
 

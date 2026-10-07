@@ -96,7 +96,7 @@
 
   {% if result.sample_comps %}
   <details class="panel">
-    <summary>Comparable listings used ({{ result.sample_comps|length }} shown)</summary>
+    <summary>Comparable listings used ({{ result.sample_comps|length }} shown), from an eBay search for "{{ result.search_text }}"</summary>
     <ul class="comps">
       {% for c in result.sample_comps %}
       <li><span class="comp-price">${{ '%.2f'|format(c.price) }}</span> {{ c.title }}</li>

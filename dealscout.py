@@ -181,13 +181,18 @@ def analyze():
     if vision.get("error"):
         warnings.append(vision["error"])
 
-    # Comps are searched by Gemini's resale title when it gives one.
-    search_query = vision.get("resale_title_suggestion") or title
+    # Comps are searched by the listing's own title. The model's suggested
+    # title is left out, since words in the description could steer it
+    # toward a pricier item.
+    search_text = title
     try:
-        comps = ebay_api.search_comps(search_query, asking_price)
+        comps = ebay_api.search_comps(search_text, asking_price)
     except ebay_api.EbayError as e:
         comps = []
         warnings.append(str(e))
+    if not comps:
+        warnings.append(f'The eBay search for "{search_text}" brought back '
+                        f'no comparable listings.')
 
     result = scoring.score_deal(asking_price,
                                 [c["price"] for c in comps],
@@ -228,6 +233,7 @@ def analyze():
                                "reason": result["reason"],
                                "comps": result["comps"],
                                "sample_comps": comps[:6],
+                               "search_text": search_text,
                                "est_profit_low": result["est_profit_low"],
                                "est_profit_high": result["est_profit_high"],
                                "suggested_offer": result["suggested_offer"],

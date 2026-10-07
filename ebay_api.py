@@ -234,7 +234,10 @@ DEMO_PRICE_RATIO = (0.8, 2.4)
 def _demo_comps(query: str, asking_price: float) -> list[dict]:
     """Made-up comps for demo mode, priced around the asking price.
     Seeded from the query and price, so the same input always gives the
-    same comps. Uses its own generator and leaves the global one alone."""
+    same comps. The query is cleaned first, so the sample listing's title
+    seeds the same comps as its cleaned form. Uses its own generator and
+    leaves the global one alone."""
+    query = demo_data.clean_title(query)
     rng = random.Random(f"{query}|{asking_price:.2f}")
     base = asking_price * rng.uniform(*DEMO_PRICE_RATIO)
     prices = [round(base * rng.uniform(0.75, 1.35), 2) for _ in range(14)]

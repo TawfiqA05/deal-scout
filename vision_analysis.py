@@ -5,7 +5,7 @@ Sends the listing photos and text to Gemini and gets back:
   - a condition assessment
   - authenticity / scam red flags
   - what's missing that you should ask the seller
-  - a category guess (used to pick the right eBay fee)
+  - a category from the fee table (used to pick the right eBay fee)
 
 The answer is JSON that follows REPORT_SCHEMA. If DEMO_MODE is on, this
 returns a made-up report instead and makes no network call.
@@ -58,7 +58,10 @@ REPORT_SCHEMA = {
             "Like New", "Good", "Fair", "Poor", "Unknown"]},
         "red_flags": {"type": "array", "items": {"type": "string"}},
         "missing_info": {"type": "array", "items": {"type": "string"}},
-        "category_guess": {"type": "string"},
+        # Only the fee table's names, so the answer can't name a fee of
+        # its own. clean_report checks it again.
+        "category_guess": {"type": "string",
+                           "enum": list(settings.EBAY_CATEGORY_FEES)},
         "resale_title_suggestion": {"type": "string"},
     },
     "required": ["condition", "condition_grade", "red_flags", "missing_info",
@@ -81,7 +84,7 @@ Look at the photos (if any) and the text. Answer in JSON with these fields:
   "condition_grade": "one of: Like New / Good / Fair / Poor / Unknown",
   "red_flags": ["short bullet", "..."],
   "missing_info": ["what to ask the seller before buying", "..."],
-  "category_guess": "short category like: tools, electronics, sneakers, video games, collectibles, clothing, etc.",
+  "category_guess": "exactly one of: {categories}. Use default if none fits.",
   "resale_title_suggestion": "a strong eBay search/listing title for this exact item, including brand and model if visible"
 }}
 Keep red_flags and missing_info honest and specific. Empty lists are fine if there's nothing to flag."""
@@ -120,7 +123,8 @@ def analyze(title: str, price: float, description: str,
         if block:
             parts.append(block)
     parts.append({"text": PROMPT.format(
-        title=title, price=price, description=(description or "(none)")[:3000])})
+        title=title, price=price, description=(description or "(none)")[:3000],
+        categories=", ".join(settings.EBAY_CATEGORY_FEES))})
 
     try:
         text = gemini.generate(api_key, parts, max_tokens=MAX_OUTPUT_TOKENS,
@@ -148,10 +152,20 @@ def clean_report(report: dict, title: str) -> dict:
         "condition_grade": _text(report.get("condition_grade")) or "Unknown",
         "red_flags": text_list(report.get("red_flags")),
         "missing_info": text_list(report.get("missing_info")),
-        "category_guess": _text(report.get("category_guess")),
+        "category_guess": fee_category(report.get("category_guess")),
         "resale_title_suggestion":
             _text(report.get("resale_title_suggestion")) or title,
     }
+
+
+def fee_category(value) -> str:
+    """The fee table name the answer gives, matched exactly apart from
+    case and spaces, else "default". A near miss like "men's sneakers"
+    gets the default fee, so words in a listing can't pick a fee by
+    containing a table name."""
+    text = _text(value)
+    name = " ".join(text.lower().split()) if text else ""
+    return name if name in settings.EBAY_CATEGORY_FEES else "default"
 
 
 def _text(value) -> str | None:

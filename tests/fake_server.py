@@ -17,6 +17,9 @@ Gemini answers (server.gemini):
   "report_string" the report text is a JSON string
   "category_list" category_guess is a list
   "flags_string"  red_flags is one string
+  "obeys"         follows orders in the listing text, the way a model can:
+                  'resale title "X"' and 'category "Y"' are copied into
+                  the report as they are
   "timeout"       answers after the client has given up
   "http_400", "http_403", "http_429", "http_500"  an error answer
 A host in server.unreachable refuses the connection.
@@ -33,6 +36,7 @@ RAW_MARKER, so a test can tell if raw error text ever reaches the page.
 
 import base64
 import json
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -92,8 +96,15 @@ COMP_PRICES = [42.0, 45.5, 48.0, 50.0, 51.0, 52.5, 55.0, 56.0, 58.0, 60.0,
                62.0, 65.0]
 
 
-def _report_text(mode):
+def _report_text(mode, prompt_text=""):
     report = dict(GOOD_REPORT)
+    if mode == "obeys":
+        title = re.search(r'resale title "([^"]+)"', prompt_text)
+        category = re.search(r'category "([^"]+)"', prompt_text)
+        if title:
+            report["resale_title_suggestion"] = title.group(1)
+        if category:
+            report["category_guess"] = category.group(1)
     if mode == "report_list":
         return json.dumps(["Good", "electronics"])
     if mode == "report_string":
@@ -105,6 +116,16 @@ def _report_text(mode):
     if mode == "cut_off":
         return json.dumps(report)[:40]
     return json.dumps(report)
+
+
+def _prompt_text(body):
+    """The text parts of a generateContent request, joined."""
+    try:
+        parts = body["contents"][0]["parts"]
+    except (KeyError, IndexError, TypeError):
+        return ""
+    return "\n".join(p["text"] for p in parts
+                     if isinstance(p, dict) and isinstance(p.get("text"), str))
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -204,7 +225,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(200, {"promptFeedback": {"blockReason": "SAFETY"}})
         prompt = json.dumps(entry["body"])
         is_draft = "negotiation message" in prompt
-        text = DRAFT_TEXT if is_draft else _report_text(mode)
+        text = DRAFT_TEXT if is_draft else _report_text(
+            mode, _prompt_text(entry["body"]))
         if is_draft and mode in ("cut_off", "blocked_finish"):
             text = DRAFT_TEXT[:20]
         if not is_draft and mode == "blocked_finish":
