@@ -75,7 +75,9 @@ class UploadsFolderProblems(AppTestCase):
         with mock.patch.object(dealscout, "UPLOAD_DIR", folder):
             response = self.analyze_with_photo()
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(list(folder.iterdir())), 1)
+        # The folder was made again; the photo went when the request ended.
+        self.assertTrue(folder.is_dir())
+        self.assertEqual(list(folder.iterdir()), [])
 
     def test_folder_that_cannot_be_made_gives_a_warning(self):
         blocker = Path(tempfile.mkdtemp(dir=TMP_DIR)) / "a-file"

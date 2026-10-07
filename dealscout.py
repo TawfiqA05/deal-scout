@@ -20,8 +20,8 @@ from threading import Timer
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, render_template, request
-from werkzeug.exceptions import HTTPException
+from flask import Flask, g, render_template, request
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
 import database
 import ebay_api
@@ -48,6 +48,12 @@ except OSError:
 # The formats Google lists for Gemini. GIF isn't one of them.
 ALLOWED_PHOTO_TYPES = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 MAX_PHOTO_BYTES = int(4.5 * 1024 * 1024)   # photo analysis API limit
+# The most one request may carry: six full-size photos plus room for the
+# form. Extra photos inside that get skipped one by one with a warning;
+# past it, Flask refuses the request before reading it all.
+MAX_REQUEST_BYTES = settings.MAX_PHOTOS * MAX_PHOTO_BYTES + 1024 * 1024
+REQUEST_MB = MAX_REQUEST_BYTES // (1024 * 1024)
+app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
 TOTAL_MB = settings.MAX_TOTAL_PHOTO_BYTES // (1024 * 1024)
 MAX_ASKING_PRICE = 1_000_000
 
@@ -61,6 +67,8 @@ REFUSED_ORIGIN = ("Deal Scout turned that down because it came from another "
                   "website. Use the form on this page instead.")
 REFUSED_TOKEN = ("This page was out of date, so nothing was analyzed. Fill in "
                  "the form below and try again.")
+REFUSED_TOO_BIG = (f"That upload was over {REQUEST_MB} MB, so nothing was "
+                   f"analyzed. Pick fewer or smaller photos and try again.")
 
 
 def _usable_price(price: float) -> bool:
@@ -87,12 +95,29 @@ def _download_image(url: str) -> tuple[bytes, str] | None:
     return r.content, suffix
 
 
-def _save_photo(data: bytes, suffix: str) -> Path:
-    """Write one photo to the uploads folder. Raises OSError if it can't."""
+def _new_photo_path(suffix: str) -> Path:
+    """A fresh path in the uploads folder, noted so the request removes it
+    when it ends. Raises OSError if the folder can't be made."""
     path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    g.setdefault("saved_photos", []).append(path)
+    return path
+
+
+def _save_photo(data: bytes, suffix: str) -> Path:
+    """Write one photo to the uploads folder. Raises OSError if it can't."""
+    path = _new_photo_path(suffix)
     path.write_bytes(data)
     return path
+
+
+def _upload_size(f) -> int:
+    """The uploaded file's size, read from Flask's copy before it's saved."""
+    stream = f.stream
+    stream.seek(0, os.SEEK_END)
+    size = stream.tell()
+    stream.seek(0)
+    return size
 
 
 def _server_port() -> str:
@@ -123,6 +148,12 @@ def _token_ok() -> bool:
     return hmac.compare_digest(sent.encode(), FORM_TOKEN.encode())
 
 
+def _wrong_host_page():
+    return render_template(
+        "error.html", wrong_host=True,
+        local_address=f"http://localhost:{_server_port()}"), 400
+
+
 def _form_with_error(message: str, code: int):
     return render_template("index.html", demo_mode=settings.DEMO_MODE,
                            settings=settings, result=None,
@@ -135,9 +166,7 @@ def only_this_tool():
     Host gets the error page, without the form, so the token never goes
     to a page that isn't this tool's."""
     if not _host_ok():
-        return render_template(
-            "error.html", wrong_host=True,
-            local_address=f"http://localhost:{_server_port()}"), 400
+        return _wrong_host_page()
     if not _origin_ok():
         return _form_with_error(REFUSED_ORIGIN, 403)
     if request.method == "POST" and not _token_ok():
@@ -224,28 +253,26 @@ def analyze():
             warnings.append(f"Skipped '{f.filename}'. The photo check takes "
                             f"JPG, PNG, WebP and HEIC photos only.")
             continue
-        path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
+        # Sizes are checked before anything is written to the folder.
+        size = _upload_size(f)
+        if size > MAX_PHOTO_BYTES:
+            warnings.append(f"Skipped '{f.filename}' because it's over "
+                            f"4.5 MB. Use a smaller copy or a screenshot "
+                            f"of it.")
+            continue
+        if photo_bytes + size > settings.MAX_TOTAL_PHOTO_BYTES:
+            warnings.append(f"Skipped '{f.filename}' because the photos "
+                            f"together would go over {TOTAL_MB} MB, the most "
+                            f"the photo check can send.")
+            continue
         try:
-            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            path = _new_photo_path(suffix)
             f.save(path)
-            size = path.stat().st_size
         except OSError:
             # Folder gone and can't be made, or read-only.
             uploads_failed = True
             warnings.append("Couldn't save the uploaded photos, so the "
                             "check ran without them.")
-            continue
-        if size > MAX_PHOTO_BYTES:
-            path.unlink(missing_ok=True)
-            warnings.append(f"Skipped '{f.filename}' — larger than the "
-                            f"~4.5MB limit the photo analysis accepts. "
-                            f"Use a smaller copy or a screenshot of it.")
-            continue
-        if photo_bytes + size > settings.MAX_TOTAL_PHOTO_BYTES:
-            path.unlink(missing_ok=True)
-            warnings.append(f"Skipped '{f.filename}' because the photos "
-                            f"together would go over {TOTAL_MB} MB, the most "
-                            f"the photo check can send.")
             continue
         photo_bytes += size
         photo_paths.append(path)
@@ -349,6 +376,25 @@ def history():
     return render_template("history.html", rows=rows,
                            active_filter=verdict or "ALL",
                            demo_mode=settings.DEMO_MODE)
+
+
+@app.teardown_request
+def remove_saved_photos(exc=None):
+    """The photos a request saved are only needed while it runs, so they
+    go when it ends, whether or not the analysis finished. Anything else
+    in the uploads folder is left alone."""
+    for path in g.pop("saved_photos", []):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            app.logger.warning("Couldn't remove %s", path.name)
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def request_too_big(e):
+    if not _host_ok():
+        return _wrong_host_page()
+    return _form_with_error(REFUSED_TOO_BIG, 413)
 
 
 @app.errorhandler(Exception)
